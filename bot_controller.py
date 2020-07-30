@@ -91,6 +91,15 @@ class BotController:
                                                 'reply_to_message_id': reply_message_id})
 
     def process_text(self, user_id, message_text):
+        if not os.path.isdir('image'):
+            os.mkdir('image')
+        if not os.path.isdir(f'image/{user_id}'):
+            os.mkdir(f'image/{user_id}')
+        if not os.path.isdir('audio'):
+            os.mkdir('audio')
+        if not os.path.isdir(f'audio/{user_id}'):
+            os.mkdir(f'audio/{user_id}')
+
         if message_text == '/help':
             response_text = '/help - Список доступных комманд\n' \
                             '/list - Список загруженных файлов вашим пользователем\n' \
