@@ -124,10 +124,12 @@ class BotController:
                     file = {'document': f}
                     requests.post(f'https://api.telegram.org/bot{self.token}/sendDocument?chat_id={user_id}', files=file)
 
-            if file_name in os.listdir(f'image/{user_id}'):
+            elif file_name in os.listdir(f'image/{user_id}'):
                 with open(f'image/{user_id}/{file_name}', 'rb') as f:
                     file = {'document': f}
                     requests.post(f'https://api.telegram.org/bot{self.token}/sendDocument?chat_id={user_id}', files=file)
+            else:
+                self.request('sendMessage', params={'chat_id': user_id, 'text': 'Такого файла не существует'})
 
     def check_updates(self):
         result = self.request('getUpdates', params={'timeout': self.timeout, 'offset': self.offset})['result']
