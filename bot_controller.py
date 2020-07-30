@@ -90,9 +90,38 @@ class BotController:
                                                 'text': f'Аудиозапись скачана как audio_message_{file_count}.wav',
                                                 'reply_to_message_id': reply_message_id})
 
+    def process_text(self, user_id, message_text):
+        if message_text == '/help':
+            response_text = '/help - Список доступных комманд\n' \
+                            '/list - Список загруженных файлов вашим пользователем\n' \
+                            '/send <Название файла> - Отправить файл в этот диалог'
+            self.request('sendMessage', params={'chat_id': user_id, 'text': response_text})
+        elif message_text == '/list':
+            response_text = 'Audio:\n'
+            for file_name in os.listdir(f'audio/{user_id}'):
+                response_text += file_name + '\n'
+
+            response_text += 'Photo:\n'
+            for file_name in os.listdir(f'image/{user_id}'):
+                response_text += file_name + '\n'
+
+            self.request('sendMessage', params={'chat_id': user_id, 'text': response_text})
+
+        elif message_text.split(' ')[0] == '/send':
+            file_name = message_text.split(' ')[1]
+
+            if file_name in os.listdir(f'audio/{user_id}'):
+                with open(f'audio/{user_id}/{file_name}', 'rb') as f:
+                    file = {'document': f}
+                    requests.post(f'https://api.telegram.org/bot{self.token}/sendDocument?chat_id={user_id}', files=file)
+
+            if file_name in os.listdir(f'image/{user_id}'):
+                with open(f'image/{user_id}/{file_name}', 'rb') as f:
+                    file = {'document': f}
+                    requests.post(f'https://api.telegram.org/bot{self.token}/sendDocument?chat_id={user_id}', files=file)
+
     def check_updates(self):
         result = self.request('getUpdates', params={'timeout': self.timeout, 'offset': self.offset})['result']
-        # result = self.request('getUpdates')['result']
         for update in result:
             self.offset = update['update_id'] + 1
 
@@ -105,6 +134,7 @@ class BotController:
             if 'text' in message:
                 text = message['text']
                 print(f'[{message_id}] From {username}({user_id}): {text}')
+                self.process_text(user_id, text)
 
             elif 'document' in message:
                 document = message['document']
@@ -120,5 +150,10 @@ class BotController:
                 if 'audio' in voice['mime_type']:
                     print(f'[{message_id}] From {username}({user_id}): incoming audio')
                     self.process_audio(user_id, voice['file_id'], message_id)
+
+            elif 'photo' in message:
+                for photo in message['photo']:
+                    print(f'[{message_id}] From {username}({user_id}): incoming image')
+                    self.process_image(user_id, photo['file_id'], message_id)
 
         return result
