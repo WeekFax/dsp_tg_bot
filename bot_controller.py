@@ -22,6 +22,11 @@ class BotController:
         return req_ans.json()
 
     def download_file(self, file_id):
+        """
+        Get the link to requested file and download it to 'buf' folder
+        :param file_id: Unique file id
+        :return: Path to the file on disk
+        """
         req_ans = self.request('getFile', params={'file_id': file_id})
         if req_ans['ok']:
             tg_file_path = req_ans['result']['file_path']
@@ -40,6 +45,13 @@ class BotController:
             return None
 
     def process_image(self, user_id, file_id, reply_message_id):
+        """
+        Download the file, check for the face on it with the haar cascade
+        In case there is the face on the image, save it in the user's folder
+        :param user_id: User or chat id
+        :param file_id: Unique file id
+        :param reply_message_id: Id of the message need to reply to
+        """
         if not os.path.isdir('image'):
             os.mkdir('image')
         if not os.path.isdir(f'image/{user_id}'):
@@ -72,6 +84,12 @@ class BotController:
             os.remove(file_name)
 
     def process_audio(self, user_id, file_id, reply_message_id):
+        """
+        Download audio file, resample it to 16kHz and save as .wav file in user's folder
+        :param user_id: User or chat id
+        :param file_id: Unique file id
+        :param reply_message_id: Id of the message need to reply to
+        """
         if not os.path.isdir('audio'):
             os.mkdir('audio')
         if not os.path.isdir(f'audio/{user_id}'):
@@ -79,10 +97,13 @@ class BotController:
 
         file_name = self.download_file(file_id)
         if file_name is not None:
+            # Считываем файл и сразу делаем ресемпл до 16кГц
             raw_audio, sr = librosa.load(file_name, 16000)
 
+            # Считаем кол-во файлов в папке пользователя
             file_count = len(os.listdir(f'audio/{user_id}'))
 
+            # Сохраняем аудио файл в папку пользователя
             sf.write(f'audio/{user_id}/audio_message_{file_count}.wav', raw_audio, 16000)
             os.remove(file_name)
 
@@ -91,6 +112,11 @@ class BotController:
                                                 'reply_to_message_id': reply_message_id})
 
     def process_text(self, user_id, message_text):
+        """
+        Check incoming message for known commands and reply to it
+        :param user_id: User or chad id
+        :param message_text: Incoming message text
+        """
         if not os.path.isdir('image'):
             os.mkdir('image')
         if not os.path.isdir(f'image/{user_id}'):
@@ -105,6 +131,8 @@ class BotController:
                             '/list - Список загруженных файлов вашим пользователем\n' \
                             '/send <Название файла> - Отправить файл в этот диалог'
             self.request('sendMessage', params={'chat_id': user_id, 'text': response_text})
+
+        # Выводим список файлов, загруженных пользователем
         elif message_text == '/list':
             response_text = 'Audio:\n'
             for file_name in os.listdir(f'audio/{user_id}'):
@@ -116,14 +144,17 @@ class BotController:
 
             self.request('sendMessage', params={'chat_id': user_id, 'text': response_text})
 
+        # Отправляем пользователю сохраненный в его папке файл
         elif message_text.split(' ')[0] == '/send':
             file_name = message_text.split(' ')[1]
 
+            # Проверяем наличие файла в папке с аудио
             if file_name in os.listdir(f'audio/{user_id}'):
                 with open(f'audio/{user_id}/{file_name}', 'rb') as f:
                     file = {'document': f}
                     requests.post(f'https://api.telegram.org/bot{self.token}/sendDocument?chat_id={user_id}', files=file)
 
+            # Проверяем файл в папке с изображениями
             elif file_name in os.listdir(f'image/{user_id}'):
                 with open(f'image/{user_id}/{file_name}', 'rb') as f:
                     file = {'document': f}
@@ -132,6 +163,12 @@ class BotController:
                 self.request('sendMessage', params={'chat_id': user_id, 'text': 'Такого файла не существует'})
 
     def check_updates(self):
+        """
+        Check for new messages that came to bot
+        :return:
+        """
+
+        # Время ожидания в timeout, номер ожидаемого обновления (нового сообщения) в offset
         result = self.request('getUpdates', params={'timeout': self.timeout, 'offset': self.offset})['result']
         for update in result:
             self.offset = update['update_id'] + 1
@@ -142,11 +179,14 @@ class BotController:
             user_id = message['chat']['id']
             username = message['chat']['username']
 
+            # Если пришел текст, проверяем на наличие в нем команд
             if 'text' in message:
                 text = message['text']
                 print(f'[{message_id}] From {username}({user_id}): {text}')
                 self.process_text(user_id, text)
 
+            # Если пришел документ, проверяем его тип
+            # Если пришло изображение или аудио обрабатываем его соотвествуюущим образом
             elif 'document' in message:
                 document = message['document']
                 if 'image' in document['mime_type']:
@@ -158,9 +198,8 @@ class BotController:
 
             elif 'voice' in message:
                 voice = message['voice']
-                if 'audio' in voice['mime_type']:
-                    print(f'[{message_id}] From {username}({user_id}): incoming audio')
-                    self.process_audio(user_id, voice['file_id'], message_id)
+                print(f'[{message_id}] From {username}({user_id}): incoming audio')
+                self.process_audio(user_id, voice['file_id'], message_id)
 
             elif 'photo' in message:
                 for photo in message['photo']:
